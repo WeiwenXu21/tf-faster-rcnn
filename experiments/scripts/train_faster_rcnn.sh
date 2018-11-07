@@ -4,6 +4,7 @@ set -x
 set -e
 
 export PYTHONUNBUFFERED="True"
+export PYTHONIOENCODING='utf-8'
 
 GPU_ID=$1
 DATASET=$2
@@ -15,11 +16,19 @@ EXTRA_ARGS=${array[@]:3:$len}
 EXTRA_ARGS_SLUG=${EXTRA_ARGS// /_}
 
 case ${DATASET} in
+  wider_face)
+    TRAIN_IMDB="wider_train"
+    TEST_IMDB="wider_val"
+    STEPSIZE="[50000]"
+    ITERS=70020
+    ANCHORS="[8,16,32]"
+    RATIOS="[0.5,1,2]"
+    ;;
   pascal_voc)
     TRAIN_IMDB="voc_2007_trainval"
     TEST_IMDB="voc_2007_test"
     STEPSIZE="[50000]"
-    ITERS=70000
+    ITERS=10
     ANCHORS="[8,16,32]"
     RATIOS="[0.5,1,2]"
     ;;
@@ -82,4 +91,5 @@ if [ ! -f ${NET_FINAL}.index ]; then
   fi
 fi
 
-./experiments/scripts/test_faster_rcnn.sh $@
+#./experiments/scripts/test_faster_rcnn.sh $@
+

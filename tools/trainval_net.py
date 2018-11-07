@@ -72,7 +72,6 @@ def combined_roidb(imdb_names):
     print('Set proposal method: {:s}'.format(cfg.TRAIN.PROPOSAL_METHOD))
     roidb = get_training_roidb(imdb)
     return roidb
-
   roidbs = [get_roidb(s) for s in imdb_names.split('+')]
   roidb = roidbs[0]
   if len(roidbs) > 1:
@@ -102,7 +101,11 @@ if __name__ == '__main__':
   np.random.seed(cfg.RNG_SEED)
 
   # train set
+  orgflip = cfg.TRAIN.USE_FLIPPED
+  if 'wider' in args.imdb_name:
+    cfg.TRAIN.USE_FLIPPED = False
   imdb, roidb = combined_roidb(args.imdb_name)
+  cfg.TRAIN.USE_FLIPPED = orgflip
   print('{:d} roidb entries'.format(len(roidb)))
 
   # output directory where the models are saved
@@ -120,6 +123,9 @@ if __name__ == '__main__':
   print('{:d} validation roidb entries'.format(len(valroidb)))
   cfg.TRAIN.USE_FLIPPED = orgflip
 
+  tfconfig = tf.ConfigProto(allow_soft_placement=True)
+  tfconfig.gpu_options.allow_growth = True
+
   # load network
   if args.net == 'vgg16':
     net = vgg16()
@@ -133,7 +139,9 @@ if __name__ == '__main__':
     net = mobilenetv1()
   else:
     raise NotImplementedError
-    
+
+
+  print('start training!!')
   train_net(net, imdb, roidb, valroidb, output_dir, tb_dir,
             pretrained_model=args.weight,
             max_iters=args.max_iters)

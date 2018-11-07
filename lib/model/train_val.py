@@ -11,10 +11,11 @@ from model.config import cfg
 import roi_data_layer.roidb as rdl_roidb
 from roi_data_layer.layer import RoIDataLayer
 from utils.timer import Timer
-try:
-  import cPickle as pickle
-except ImportError:
-  import pickle
+from tensorflow.python import pywrap_tensorflow
+#try:
+#import cPickle as pickle
+#except ImportError:
+import pickle
 import numpy as np
 import os
 import sys
@@ -51,7 +52,7 @@ class SolverWrapper(object):
     # Store the model snapshot
     filename = cfg.TRAIN.SNAPSHOT_PREFIX + '_iter_{:d}'.format(iter) + '.ckpt'
     filename = os.path.join(self.output_dir, filename)
-    self.saver.save(sess, filename)
+    self.saver_full.save(sess, filename)
     print('Wrote snapshot to: {:s}'.format(filename))
 
     # Also store some meta information, random state, etc.
@@ -81,17 +82,43 @@ class SolverWrapper(object):
 
   def from_snapshot(self, sess, sfile, nfile):
     print('Restoring model snapshots from {:s}'.format(sfile))
+#    varlist=self.print_tensors_in_checkpoint_file(file_name=sfile, all_tensors=True, tensor_name=None)
+#    sess.run(tf.global_variables_initializer())
+    variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+#    print(varlist)
+#    print(len(variables),len(varlist))
+
+    variables_to_restore = []
+    new_varibles = []
+    for v in variables:
+      tmp = v.name.split('/')
+      if len(tmp)>1:
+        if not tmp[1].endswith('-1'):
+          variables_to_restore.append(v)
+        else:
+          new_varibles.append(v)
+#    variables_to_restore = [v for v in variables if not v.name.split('/')[1].endswith('-1')]
+#    print(variables_to_restore)
+    # We will handle the snapshots ourselves
+    self.saver = tf.train.Saver(variables_to_restore,max_to_keep=100000)
     self.saver.restore(sess, sfile)
+
+    self.initialize_uninitialized_vars(sess)
+
     print('Restored.')
     # Needs to restore the other hyper-parameters/states for training, (TODO xinlei) I have
     # tried my best to find the random states so that it can be recovered exactly
     # However the Tensorflow state is currently not available
+#    print(nfile)
     with open(nfile, 'rb') as fid:
-      st0 = pickle.load(fid)
+#      for line in fid:
+#        a.append(line.decode(errors='ignore'))
+#      fid.decode(errors='ignore')
+      st0 = pickle.load(fid, encoding='ISO-8859-1')
       cur = pickle.load(fid)
-      perm = pickle.load(fid)
+      perm = pickle.load(fid, encoding='ISO-8859-1')
       cur_val = pickle.load(fid)
-      perm_val = pickle.load(fid)
+      perm_val = pickle.load(fid, encoding='ISO-8859-1')
       last_snapshot_iter = pickle.load(fid)
 
       np.random.set_state(st0)
@@ -113,14 +140,35 @@ class SolverWrapper(object):
         print("It's likely that your checkpoint file has been compressed "
               "with SNAPPY.")
 
+  def initialize_uninitialized_vars(self,sess):
+    from itertools import compress
+    global_vars = tf.global_variables()
+    is_not_initialized = sess.run([~(tf.is_variable_initialized(var)) \
+                                   for var in global_vars])
+    not_initialized_vars = list(compress(global_vars, is_not_initialized))
+    if len(not_initialized_vars):
+      sess.run(tf.variables_initializer(not_initialized_vars))
+
+  def print_tensors_in_checkpoint_file(self, file_name, tensor_name, all_tensors):
+    varlist=[]
+    reader = pywrap_tensorflow.NewCheckpointReader(file_name)
+    if all_tensors:
+      var_to_shape_map = reader.get_variable_to_shape_map()
+      for key in sorted(var_to_shape_map):
+        varlist.append(key)
+    return varlist
+
   def construct_graph(self, sess):
     with sess.graph.as_default():
       # Set the random seed for tensorflow
       tf.set_random_seed(cfg.RNG_SEED)
       # Build the main computation graph
-      layers = self.net.create_architecture('TRAIN', self.imdb.num_classes, tag='default',
+      layers = self.net.create_architecture('TRAIN',
+                                            self.imdb.num_classes,
+                                            tag='default',
                                             anchor_scales=cfg.ANCHOR_SCALES,
                                             anchor_ratios=cfg.ANCHOR_RATIOS)
+
       # Define the loss
       loss = layers['total_loss']
       # Set learning rate and momentum
@@ -138,14 +186,16 @@ class SolverWrapper(object):
             if cfg.TRAIN.DOUBLE_BIAS and '/biases:' in var.name:
               scale *= 2.
             if not np.allclose(scale, 1.0):
-              grad = tf.multiply(grad, scale)
+              if grad is not None:
+                grad = tf.multiply(grad, scale)
             final_gvs.append((grad, var))
         train_op = self.optimizer.apply_gradients(final_gvs)
       else:
         train_op = self.optimizer.apply_gradients(gvs)
 
       # We will handle the snapshots ourselves
-      self.saver = tf.train.Saver(max_to_keep=100000)
+      self.saver_full = tf.train.Saver(max_to_keep=100000)
+
       # Write the train and validation information to tensorboard
       self.writer = tf.summary.FileWriter(self.tbdir, sess.graph)
       self.valwriter = tf.summary.FileWriter(self.tbvaldir)
@@ -154,6 +204,8 @@ class SolverWrapper(object):
 
   def find_previous(self):
     sfiles = os.path.join(self.output_dir, cfg.TRAIN.SNAPSHOT_PREFIX + '_iter_*.ckpt.meta')
+    print('--find previous sfiles', self.output_dir)
+    print('--find previous', cfg.TRAIN.SNAPSHOT_PREFIX )
     sfiles = glob.glob(sfiles)
     sfiles.sort(key=os.path.getmtime)
     # Get the snapshot name in TensorFlow
@@ -164,6 +216,7 @@ class SolverWrapper(object):
     sfiles = [ss.replace('.meta', '') for ss in sfiles if ss not in redfiles]
 
     nfiles = os.path.join(self.output_dir, cfg.TRAIN.SNAPSHOT_PREFIX + '_iter_*.pkl')
+    print('--find previous nfiles', nfiles)
     nfiles = glob.glob(nfiles)
     nfiles.sort(key=os.path.getmtime)
     redfiles = [redfile.replace('.ckpt.meta', '.pkl') for redfile in redfiles]
@@ -243,20 +296,20 @@ class SolverWrapper(object):
     # Build data layers for both training and validation set
     self.data_layer = RoIDataLayer(self.roidb, self.imdb.num_classes)
     self.data_layer_val = RoIDataLayer(self.valroidb, self.imdb.num_classes, random=True)
-
+    print('--Built data layer!')
     # Construct the computation graph
     lr, train_op = self.construct_graph(sess)
-
+    print('--Construct graph!')
     # Find previous snapshots if there is any to restore from
     lsf, nfiles, sfiles = self.find_previous()
-
+    print('--Find previous!')
     # Initialize the variables or restore them from the last snapshot
     if lsf == 0:
+      print('--Previous found!!')
       rate, last_snapshot_iter, stepsizes, np_paths, ss_paths = self.initialize(sess)
     else:
-      rate, last_snapshot_iter, stepsizes, np_paths, ss_paths = self.restore(sess, 
-                                                                            str(sfiles[-1]), 
-                                                                            str(nfiles[-1]))
+      print('--Previous NOT found!!')
+      rate, last_snapshot_iter, stepsizes, np_paths, ss_paths = self.restore(sess, str(sfiles[-1]), str(nfiles[-1]))
     timer = Timer()
     iter = last_snapshot_iter + 1
     last_summary_time = time.time()
@@ -264,7 +317,11 @@ class SolverWrapper(object):
     stepsizes.append(max_iters)
     stepsizes.reverse()
     next_stepsize = stepsizes.pop()
+    print('before looping')
+    print(iter)
+    print(max_iters+1)
     while iter < max_iters + 1:
+      
       # Learning rate
       if iter == next_stepsize + 1:
         # Add snapshot here before reducing the learning rate
@@ -293,13 +350,13 @@ class SolverWrapper(object):
         rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, total_loss = \
           self.net.train_step(sess, blobs, train_op)
       timer.toc()
-
+      
       # Display training information
-      if iter % (cfg.TRAIN.DISPLAY) == 0:
-        print('iter: %d / %d, total loss: %.6f\n >>> rpn_loss_cls: %.6f\n '
+#      if iter % (cfg.TRAIN.DISPLAY) == 0:
+      print('iter: %d / %d, total loss: %.6f\n >>> rpn_loss_cls: %.6f\n '
               '>>> rpn_loss_box: %.6f\n >>> loss_cls: %.6f\n >>> loss_box: %.6f\n >>> lr: %f' % \
               (iter, max_iters, total_loss, rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, lr.eval()))
-        print('speed: {:.3f}s / iter'.format(timer.average_time))
+      print('speed: {:.3f}s / iter'.format(timer.average_time))
 
       # Snapshotting
       if iter % cfg.TRAIN.SNAPSHOT_ITERS == 0:
@@ -364,6 +421,7 @@ def train_net(network, imdb, roidb, valroidb, output_dir, tb_dir,
               pretrained_model=None,
               max_iters=40000):
   """Train a Faster R-CNN network."""
+  print('--initialize solverwrapper outputdir:', output_dir)
   roidb = filter_roidb(roidb)
   valroidb = filter_roidb(valroidb)
 
