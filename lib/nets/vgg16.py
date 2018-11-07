@@ -23,8 +23,8 @@ class vgg16(Network):
     self._feat_compress = [1. / float(self._feat_stride[0]), ]
     self._scope = 'vgg_16'
 
-  def _image_to_head(self, is_training, reuse=None):
-    with tf.variable_scope(self._scope, self._scope, reuse=reuse):
+  def _image_to_head(self, is_training, reuse=tf.AUTO_REUSE):
+    with tf.variable_scope(self._scope, self._scope, reuse=tf.AUTO_REUSE):
       net = slim.repeat(self._image, 2, slim.conv2d, 64, [3, 3],
                           trainable=False, scope='conv1')
       net = slim.max_pool2d(net, [2, 2], padding='SAME', scope='pool1')
@@ -45,8 +45,8 @@ class vgg16(Network):
     
     return net
 
-  def _head_to_tail(self, pool5, is_training, reuse=None):
-    with tf.variable_scope(self._scope, self._scope, reuse=reuse):
+  def _head_to_tail(self, pool5, is_training, reuse=tf.AUTO_REUSE):
+    with tf.variable_scope(self._scope, self._scope, reuse=tf.AUTO_REUSE):
       pool5_flat = slim.flatten(pool5, scope='flatten')
       fc6 = slim.fully_connected(pool5_flat, 4096, scope='fc6')
       if is_training:
@@ -72,6 +72,7 @@ class vgg16(Network):
       if v.name == (self._scope + '/conv1/conv1_1/weights:0'):
         self._variables_to_fix[v.name] = v
         continue
+ 
       if v.name.split(':')[0] in var_keep_dic:
         print('Variables restored: %s' % v.name)
         variables_to_restore.append(v)
@@ -87,9 +88,14 @@ class vgg16(Network):
         fc6_conv = tf.get_variable("fc6_conv", [7, 7, 512, 4096], trainable=False)
         fc7_conv = tf.get_variable("fc7_conv", [1, 1, 4096, 4096], trainable=False)
         conv1_rgb = tf.get_variable("conv1_rgb", [3, 3, 3, 64], trainable=False)
-        restorer_fc = tf.train.Saver({self._scope + "/fc6/weights": fc6_conv, 
+#        cls_score = tf.get_variable("cls_score", [4096, 3], trainable=False)
+#        bbox_pred = tf.get_variable("bbox_pred", [4096, 12], trainable=False)
+        restorer_fc = tf.train.Saver({self._scope + "/fc6/weights": fc6_conv,
                                       self._scope + "/fc7/weights": fc7_conv,
-                                      self._scope + "/conv1/conv1_1/weights": conv1_rgb})
+                                      self._scope + "/conv1/conv1_1/weights": conv1_rgb
+#                                      self._scope + "cls_score/weights": cls_score,
+#                                      self._scope + "bbox_pred/weights": bbox_pred
+                                     })
         restorer_fc.restore(sess, pretrained_model)
 
         sess.run(tf.assign(self._variables_to_fix[self._scope + '/fc6/weights:0'], tf.reshape(fc6_conv, 
@@ -98,3 +104,6 @@ class vgg16(Network):
                             self._variables_to_fix[self._scope + '/fc7/weights:0'].get_shape())))
         sess.run(tf.assign(self._variables_to_fix[self._scope + '/conv1/conv1_1/weights:0'], 
                             tf.reverse(conv1_rgb, [2])))
+#        sess.run(tf.assign(self._variables_to_fix[self._scope + '/conv1/conv1_1/weights:0'],
+#                            tf.reverse(conv1_rgb, [2])))
+

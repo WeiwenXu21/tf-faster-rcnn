@@ -25,7 +25,7 @@ def proposal_target_layer(rpn_rois, rpn_scores, gt_boxes, _num_classes):
   # (i.e., rpn.proposal_layer.ProposalLayer), or any other source
   all_rois = rpn_rois
   all_scores = rpn_scores
-
+  
   # Include ground-truth boxes in the set of candidate rois
   if cfg.TRAIN.USE_GT:
     zeros = np.zeros((gt_boxes.shape[0], 1), dtype=gt_boxes.dtype)
@@ -51,7 +51,7 @@ def proposal_target_layer(rpn_rois, rpn_scores, gt_boxes, _num_classes):
   bbox_targets = bbox_targets.reshape(-1, _num_classes * 4)
   bbox_inside_weights = bbox_inside_weights.reshape(-1, _num_classes * 4)
   bbox_outside_weights = np.array(bbox_inside_weights > 0).astype(np.float32)
-
+  
   return rois, roi_scores, labels, bbox_targets, bbox_inside_weights, bbox_outside_weights
 
 
@@ -88,6 +88,7 @@ def _compute_targets(ex_rois, gt_rois, labels):
   assert gt_rois.shape[1] == 4
 
   targets = bbox_transform(ex_rois, gt_rois)
+
   if cfg.TRAIN.BBOX_NORMALIZE_TARGETS_PRECOMPUTED:
     # Optionally normalize targets by a precomputed mean and stdev
     targets = ((targets - np.array(cfg.TRAIN.BBOX_NORMALIZE_MEANS))
@@ -115,13 +116,21 @@ def _sample_rois(all_rois, all_scores, gt_boxes, fg_rois_per_image, rois_per_ima
   bg_inds = np.where((max_overlaps < cfg.TRAIN.BG_THRESH_HI) &
                      (max_overlaps >= cfg.TRAIN.BG_THRESH_LO))[0]
 
+
   # Small modification to the original version where we ensure a fixed number of regions are sampled
   if fg_inds.size > 0 and bg_inds.size > 0:
     fg_rois_per_image = min(fg_rois_per_image, fg_inds.size)
+#    print('fg_rois_per_image', fg_rois_per_image)
     fg_inds = npr.choice(fg_inds, size=int(fg_rois_per_image), replace=False)
+#    print('fg_inds', fg_inds)
     bg_rois_per_image = rois_per_image - fg_rois_per_image
+#    print('bg_rois_per_image', bg_rois_per_image)
     to_replace = bg_inds.size < bg_rois_per_image
+#    print('to_replace', to_replace)
     bg_inds = npr.choice(bg_inds, size=int(bg_rois_per_image), replace=to_replace)
+#    print('bg_inds', bg_inds)
+#    print('====================')
+#    print('====================')
   elif fg_inds.size > 0:
     to_replace = fg_inds.size < rois_per_image
     fg_inds = npr.choice(fg_inds, size=int(rois_per_image), replace=to_replace)
@@ -134,15 +143,32 @@ def _sample_rois(all_rois, all_scores, gt_boxes, fg_rois_per_image, rois_per_ima
     import pdb
     pdb.set_trace()
 
+
+#  print('====================')
+#  print('====================')
+#  print('fg_inds', fg_inds)
+#  print('--------------------')
+#  print('bg_inds', bg_inds)
+#  print('--------------------')
   # The indices that we're selecting (both fg and bg)
   keep_inds = np.append(fg_inds, bg_inds)
   # Select sampled values from various arrays:
   labels = labels[keep_inds]
+#  print('labels', labels)
   # Clamp labels for the background RoIs to 0
   labels[int(fg_rois_per_image):] = 0
+#  print('labels_new', labels)
   rois = all_rois[keep_inds]
+#  print('rois', np.shape(rois))
   roi_scores = all_scores[keep_inds]
-
+#  print('roi_scores', np.shape(roi_scores))
+  aaaaa = gt_boxes[gt_assignment[keep_inds], :4]
+#  print('gt_assignment[keep_inds]', gt_assignment[keep_inds])
+#  print('gt_box_slice')
+#  for item in aaaaa:
+#    print(item)
+#  print('====================')
+#  print('====================')
   bbox_target_data = _compute_targets(
     rois[:, 1:5], gt_boxes[gt_assignment[keep_inds], :4], labels)
 

@@ -20,7 +20,7 @@ case ${DATASET} in
     TRAIN_IMDB="wider_train"
     TEST_IMDB="wider_val"
     STEPSIZE="[50000]"
-    ITERS=70020
+    ITERS=73020
     ANCHORS="[8,16,32]"
     RATIOS="[0.5,1,2]"
     ;;

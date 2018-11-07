@@ -54,7 +54,6 @@ def _get_image_blob(im):
 
   # Create a blob to hold the input images
   blob = im_list_to_blob(processed_ims)
-
   return blob, np.array(im_scale_factors)
 
 def _get_blobs(im):
@@ -89,6 +88,8 @@ def im_detect(sess, net, im):
 
   im_blob = blobs['data']
   blobs['im_info'] = np.array([im_blob.shape[1], im_blob.shape[2], im_scales[0]], dtype=np.float32)
+  print(blobs['im_info'])
+  print('&&&&&')
 
   _, scores, bbox_pred, rois = net.test_image(sess, blobs['data'], blobs['im_info'])
   
@@ -149,12 +150,17 @@ def test_net(sess, net, imdb, weights_filename, max_per_image=100, thresh=0.):
   # timers
   _t = {'im_detect' : Timer(), 'misc' : Timer()}
 
-  for i in range(num_images):
+  for i in range(2):#num_images):
+    
     im = cv2.imread(imdb.image_path_at(i))
-
+    
     _t['im_detect'].tic()
     scores, boxes = im_detect(sess, net, im)
     _t['im_detect'].toc()
+
+    print(scores[0],boxes[0])
+    print(scores[1],boxes[1])
+    print('???????')
 
     _t['misc'].tic()
 
@@ -166,6 +172,8 @@ def test_net(sess, net, imdb, weights_filename, max_per_image=100, thresh=0.):
       cls_dets = np.hstack((cls_boxes, cls_scores[:, np.newaxis])) \
         .astype(np.float32, copy=False)
       keep = nms(cls_dets, cfg.TEST.NMS)
+      print(type(keep))
+      print('!!!!!!!!')
       cls_dets = cls_dets[keep, :]
       all_boxes[j][i] = cls_dets
 

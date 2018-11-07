@@ -321,7 +321,6 @@ class SolverWrapper(object):
     print(iter)
     print(max_iters+1)
     while iter < max_iters + 1:
-      
       # Learning rate
       if iter == next_stepsize + 1:
         # Add snapshot here before reducing the learning rate
@@ -341,9 +340,9 @@ class SolverWrapper(object):
           self.net.train_step_with_summary(sess, blobs, train_op)
         self.writer.add_summary(summary, float(iter))
         # Also check the summary on the validation set
-        blobs_val = self.data_layer_val.forward()
-        summary_val = self.net.get_summary(sess, blobs_val)
-        self.valwriter.add_summary(summary_val, float(iter))
+#        blobs_val = self.data_layer_val.forward()
+#        summary_val = self.net.get_summary(sess, blobs_val)
+#        self.valwriter.add_summary(summary_val, float(iter))
         last_summary_time = now
       else:
         # Compute the graph without summary
@@ -432,5 +431,6 @@ def train_net(network, imdb, roidb, valroidb, output_dir, tb_dir,
     sw = SolverWrapper(sess, network, imdb, roidb, valroidb, output_dir, tb_dir,
                        pretrained_model=pretrained_model)
     print('Solving...')
+    print(max_iters)
     sw.train_model(sess, max_iters)
     print('done solving')
