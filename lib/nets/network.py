@@ -254,7 +254,7 @@ class Network(object):
     fc7 = self._head_to_tail(pool5, is_training)
     with tf.variable_scope(self._scope, self._scope, reuse=tf.AUTO_REUSE):
       # region classification
-      cls_prob, bbox_pred = self._region_classification(fc7, is_training, 
+      cls_prob, bbox_pred = self._region_classification(fc7, False,
                                                         initializer, initializer_bbox)
 
     self._score_summaries.update(self._predictions)
