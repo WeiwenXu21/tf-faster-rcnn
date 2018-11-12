@@ -309,6 +309,7 @@ class SolverWrapper(object):
       rate, last_snapshot_iter, stepsizes, np_paths, ss_paths = self.initialize(sess)
     else:
       print('--Previous NOT found!!')
+      print(str(nfiles[-1]))
       rate, last_snapshot_iter, stepsizes, np_paths, ss_paths = self.restore(sess, str(sfiles[-1]), str(nfiles[-1]))
     timer = Timer()
     iter = last_snapshot_iter + 1
@@ -317,9 +318,13 @@ class SolverWrapper(object):
     stepsizes.append(max_iters)
     stepsizes.reverse()
     next_stepsize = stepsizes.pop()
-    print('before looping')
-    print(iter)
-    print(max_iters+1)
+
+    totl = []
+    rpnlcls = []
+    rpnlreg = []
+    lcls = []
+    lreg = []
+
     while iter < max_iters + 1:
       # Learning rate
       if iter == next_stepsize + 1:
@@ -335,28 +340,41 @@ class SolverWrapper(object):
 
       now = time.time()
       if iter == 1 or now - last_summary_time > cfg.TRAIN.SUMMARY_INTERVAL:
+        print('Enter condition 1')
         # Compute the graph with summary
-        rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, total_loss, summary = \
+#        , loss_cls, loss_box
+        rpn_loss_cls, rpn_loss_box, total_loss, summary = \
           self.net.train_step_with_summary(sess, blobs, train_op)
+        print('done 1 epoch')
         self.writer.add_summary(summary, float(iter))
         # Also check the summary on the validation set
-#        blobs_val = self.data_layer_val.forward()
-#        summary_val = self.net.get_summary(sess, blobs_val)
-#        self.valwriter.add_summary(summary_val, float(iter))
+        blobs_val = self.data_layer_val.forward()
+        summary_val = self.net.get_summary(sess, blobs_val)
+        self.valwriter.add_summary(summary_val, float(iter))
         last_summary_time = now
       else:
+        print('Enter condition 2')
         # Compute the graph without summary
-        rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, total_loss = \
+#        , loss_cls, loss_box
+        rpn_loss_cls, rpn_loss_box, total_loss = \
           self.net.train_step(sess, blobs, train_op)
+#        print('done 1 epoch')
       timer.toc()
-      
       # Display training information
 #      if iter % (cfg.TRAIN.DISPLAY) == 0:
+      totl.append(total_loss)
+      rpnlcls.append(rpn_loss_cls)
+      rpnlreg.append(rpn_loss_box)
+#      lcls.append(loss_cls)
+#      lreg.append(loss_box)
+#      print('iter: %d / %d, total loss: %.6f\n >>> rpn_loss_cls: %.6f\n '
+#              '>>> rpn_loss_box: %.6f\n >>> loss_cls: %.6f\n >>> loss_box: %.6f\n >>> lr: %f' % \
+#              (iter, max_iters, total_loss, rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, lr.eval()))
       print('iter: %d / %d, total loss: %.6f\n >>> rpn_loss_cls: %.6f\n '
-              '>>> rpn_loss_box: %.6f\n >>> loss_cls: %.6f\n >>> loss_box: %.6f\n >>> lr: %f' % \
-              (iter, max_iters, total_loss, rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, lr.eval()))
+            '>>> rpn_loss_box: %.6f\n >>> lr: %f' % \
+            (iter, max_iters, total_loss, rpn_loss_cls, rpn_loss_box, lr.eval()))
       print('speed: {:.3f}s / iter'.format(timer.average_time))
-
+      print('***************')
       # Snapshotting
       if iter % cfg.TRAIN.SNAPSHOT_ITERS == 0:
         last_snapshot_iter = iter
@@ -372,6 +390,18 @@ class SolverWrapper(object):
 
     if last_snapshot_iter != iter - 1:
       self.snapshot(sess, iter - 1)
+    
+#    totl = np.array(totl)
+#    rpnlcls = np.array(rpnlcls)
+#    rpnlreg = np.array(rpnlreg)
+#    lcls = np.array(lcls)
+#    lreg = np.array(lreg)
+    
+    np.save('total_loss_5000.npy', np.array(totl))
+    np.save('rpn_cls_loss_5000.npy', np.array(rpnlcls))
+    np.save('rpn_reg_loss_5000.npy', np.array(rpnlreg))
+#    np.save('rcnn_cls_loss_5000.npy', np.array(lcls))
+#    np.save('rcnn_reg_loss_5000.npy', np.array(lreg))
 
     self.writer.close()
     self.valwriter.close()
