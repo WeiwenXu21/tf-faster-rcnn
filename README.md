@@ -1,3 +1,5 @@
+This fork has been modified by [WeiwenXu](https://github.com/WeiwenXu21) to incorprate [wider_face dataset](http://mmlab.ie.cuhk.edu.hk/projects/WIDERFace/) for Face Detection
+---
 # tf-faster-rcnn is deprecated:
 For a good and more up-to-date implementation for faster/mask RCNN with multi-gpu support, please see the example in TensorPack [here](https://github.com/tensorpack/tensorpack/tree/master/examples/FasterRCNN).
 
